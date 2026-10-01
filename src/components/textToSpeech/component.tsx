@@ -22,6 +22,7 @@ import "./textToSpeech.css";
 import { fetchUserInfo } from "../../utils/request/user";
 import { getSplitSentence } from "../../utils/request/reader";
 import { Howl } from "howler";
+import SpeechHighlighter, { ttsHighlightStyle, findVisibleSpeechIndex } from "../../utils/reader/ttsHighlight";
 declare var window: any;
 class TextToSpeech extends React.Component<
   TextToSpeechProps,
@@ -37,6 +38,8 @@ class TextToSpeech extends React.Component<
   nativeVoices: any;
   previewPlayer: Howl | null;
   highlightUtil: any;
+  speechHighlighter = new SpeechHighlighter();
+  playbackRun = 0;
   constructor(props: TextToSpeechProps) {
     super(props);
     this.highlightUtil = new HighlightUtil(ConfigService);
@@ -97,7 +100,9 @@ class TextToSpeech extends React.Component<
         let synth = window.speechSynthesis;
         let id;
         if (synth) {
+          let attempts = 0;
           id = setInterval(() => {
+            attempts++;
             if (synth.getVoices().length !== 0) {
               let voices = synth.getVoices();
               resolve(
@@ -111,8 +116,11 @@ class TextToSpeech extends React.Component<
               clearInterval(id);
             } else {
               this.setState({ isSupported: false });
+              if (attempts >= 20) { clearInterval(id); resolve([]); }
             }
-          }, 10);
+          }, 50);
+        } else {
+          resolve([]);
         }
       });
     };
@@ -188,6 +196,9 @@ class TextToSpeech extends React.Component<
     }
   }
   componentWillUnmount() {
+    this.playbackRun++;
+    void TTSUtil.stopAudio();
+    this.speechHighlighter.reset();
     this.stopPreviewAudio();
   }
   componentDidUpdate(prevProps: Readonly<TextToSpeechProps>) {
@@ -380,7 +391,7 @@ class TextToSpeech extends React.Component<
   handleStartAudio = async () => {
     if (
       this.props.isAuthed &&
-      ConfigService.getReaderConfig("voiceEngine") !== "system"
+      ConfigService.getReaderConfig("voiceEngine") === "official-ai-voice-plugin"
     ) {
       toast.loading(this.props.t("Loading audio, please wait..."), {
         id: "tts-load",
@@ -397,6 +408,7 @@ class TextToSpeech extends React.Component<
     this.handleStartSpeech();
   };
   handlePauseAudio = async () => {
+    this.playbackRun++;
     if (window.speechSynthesis) {
       if (window.speechSynthesis.speaking) {
         // 在句子中途暂停，保留 utterance 状态以便从暂停位置恢复
@@ -409,6 +421,9 @@ class TextToSpeech extends React.Component<
     this.setState({ isPaused: true });
   };
   handleStop = async () => {
+    this.playbackRun++;
+    this.speechHighlighter.reset();
+    toast.dismiss("tts-load");
     window.speechSynthesis && window.speechSynthesis.cancel();
     await TTSUtil.stopAudio();
     this.setState({ isAudioOn: false, isPaused: false, currentIndex: 0 });
@@ -436,6 +451,8 @@ class TextToSpeech extends React.Component<
     });
   };
   handlePrevSentence = async () => {
+    this.playbackRun++;
+    this.speechHighlighter.reset();
     if (!this.state.isAudioOn || this.nodeList.length === 0) return;
     let prevIndex = Math.max(0, this.state.currentIndex - 1);
     window.speechSynthesis && window.speechSynthesis.cancel();
@@ -450,13 +467,19 @@ class TextToSpeech extends React.Component<
     });
   };
   handleNextSentence = async () => {
+    this.playbackRun++;
+    this.speechHighlighter.reset();
     if (!this.state.isAudioOn || this.nodeList.length === 0) return;
     let nextIndex = this.state.currentIndex + 1;
     window.speechSynthesis && window.speechSynthesis.cancel();
     await TTSUtil.pauseAudio();
     TTSUtil.pausedMidSentence = false; // 跳转句子时不从暂停位置恢复
     if (nextIndex >= this.nodeList.length) {
-      // Move to next page
+      const isPdf = this.props.currentBook.format === "PDF" && !ConfigService.getAllListConfig("convertPDFBooks").includes(this.props.currentBook.key);
+      if (isPdf) {
+        const position = this.props.htmlBook.rendition.getPosition();
+        await this.props.htmlBook.rendition.goToChapterIndex(parseInt(position.chapterDocIndex) + (this.props.readerMode === "double" ? 2 : 1));
+      } else await this.props.htmlBook.rendition.nextChapter();
       this.setState({ currentIndex: 0, isPaused: false }, async () => {
         this.nodeList = [];
         await this.handleAudio();
@@ -477,6 +500,7 @@ class TextToSpeech extends React.Component<
     previousEngine: string
   ) => {
     if (!this.state.isAudioOn || this.nodeList.length === 0) return;
+    this.playbackRun++;
 
     const currentIndex = this.state.currentIndex;
 
@@ -505,7 +529,7 @@ class TextToSpeech extends React.Component<
     TTSUtil.setAudioPaths();
 
     // AI 语音需要刷新用户信息
-    if (this.props.isAuthed && newVoiceEngine !== "system") {
+    if (this.props.isAuthed && newVoiceEngine === "official-ai-voice-plugin") {
       toast.loading(this.props.t("Loading audio, please wait..."), {
         id: "tts-load",
       });
@@ -533,12 +557,18 @@ class TextToSpeech extends React.Component<
     });
   };
   handleStartSpeech = () => {
+    this.playbackRun++;
+    TTSUtil.setAudioPaths();
+    this.speechHighlighter.reset();
     this.setState({ isAudioOn: true, isPaused: false, currentIndex: 0 }, () => {
       this.handleAudio();
     });
   };
   handleAudio = async () => {
-    this.nodeList = await this.handleGetText();
+    const run = this.playbackRun;
+    const nodes = await this.handleGetText();
+    if (run !== this.playbackRun || !this.state.isAudioOn) return;
+    this.nodeList = nodes;
     if (this.nodeList.length === 0) {
       return;
     }
@@ -552,11 +582,11 @@ class TextToSpeech extends React.Component<
       await this.handleSystemRead(0);
     }
   };
-  handleGetText = async () => {
+  handleGetText = async (): Promise<{ text: string; voiceName: string; voiceEngine: string }[]> => {
     if ((ConfigService.getReaderConfig("animation") || "none") !== "none") {
       await sleep(1000);
     }
-    let nodeList = [];
+    let nodeList: { text: string; voiceName: string; voiceEngine: string }[] = [];
     let nodeTextList = (await this.props.htmlBook.rendition.audioText()).filter(
       (item: string) => item && item.trim()
     );
@@ -574,7 +604,8 @@ class TextToSpeech extends React.Component<
 
       nodeTextList = rawNodeList.flat();
     }
-    const speechStartIndex = this.getSpeechStartIndex(nodeTextList);
+    const speechStartIndex = this.props.speechStartText ? this.getSpeechStartIndex(nodeTextList) :
+      this.props.currentBook.format === "PDF" ? -1 : findVisibleSpeechIndex(this.props.htmlBook.rendition, nodeTextList);
     if (speechStartIndex > -1) {
       nodeTextList = nodeTextList.slice(speechStartIndex);
     }
@@ -640,6 +671,7 @@ class TextToSpeech extends React.Component<
     }
 
     if (nodeList.length === 0) {
+      const before = JSON.stringify(this.props.htmlBook.rendition.getPosition());
       if (
         this.props.currentBook.format === "PDF" &&
         !ConfigService.getAllListConfig("convertPDFBooks").includes(
@@ -655,68 +687,57 @@ class TextToSpeech extends React.Component<
         await this.props.htmlBook.rendition.next();
       }
 
+      const after = JSON.stringify(this.props.htmlBook.rendition.getPosition());
+      if (after === before || !this.state.isAudioOn || this.state.isPaused) return [];
       nodeList = await this.handleGetText();
     }
     return nodeList;
   };
   async handleCustomRead(nodeIndex: number) {
-    let speed = parseFloat(ConfigService.getReaderConfig("voiceSpeed")) || 1;
-    if (!this.state.isAudioOn) {
-      TTSUtil.setAudioPaths();
-    }
-
-    for (let index = nodeIndex; index < this.nodeList.length; index++) {
-      if (this.state.isPaused || !this.state.isAudioOn) return;
+    const run = ++this.playbackRun;
+    const active = () => run === this.playbackRun && this.state.isAudioOn && !this.state.isPaused && this.props.isReading;
+    while (active()) {
+    const nodes = this.nodeList;
+    const chapterPosition = JSON.stringify(this.props.htmlBook.rendition.getPosition());
+    for (let index = nodeIndex; index < nodes.length; index++) {
+      if (!active()) return;
       this.setState({ currentIndex: index });
-      let node = this.nodeList[index];
-      let style = this.highlightUtil.buildTtsHighlightStyle(
-        this.props.currentBook.format === "PDF" &&
-          !ConfigService.getAllListConfig("convertPDFBooks").includes(
-            this.props.currentBook.key
-          )
-      );
-      this.props.htmlBook.rendition.highlightAudioNode(node.text, style);
-      if (index === nodeIndex) {
-        let result = await TTSUtil.cacheAudio(
+      const node = nodes[index];
+      if (node.voiceEngine === "system") {
+        await this.handleSystemRead(index);
+        return;
+      }
+      const speed = parseFloat(ConfigService.getReaderConfig("voiceSpeed")) || 1;
+      const result = await TTSUtil.cacheAudio(
           index,
           speed * 100 - 100,
           this.props.plugins,
-          this.nodeList,
-          10,
-          true,
+          nodes,
+          1,
+          index === nodeIndex,
           node.voiceEngine === "official-ai-voice-plugin"
         );
-        toast.dismiss("tts-load");
+      if (!active() || result === "cancelled") return;
+      toast.dismiss("tts-load");
         if (result === "error") {
           toast.error(this.props.t("Audio loading failed, stopped playback"));
-          this.setState({ isAudioOn: false });
-          this.nodeList = [];
+          // Retain position; Play retries the failed sentence rather than skipping it.
+          this.setState({ isPaused: true });
           return;
         }
-      }
-      if (this.nodeList[index].voiceEngine === "system") {
-        await this.handleSystemRead(index);
-        break;
-      }
-
-      TTSUtil.cacheAudio(
-        index + 1,
-        speed * 100 - 100,
-        this.props.plugins,
-        this.nodeList,
-        20,
-        false,
-        node.voiceEngine === "official-ai-voice-plugin"
-      );
-      let res = await this.handleSpeech(index);
-      if (res === "error") {
+      let res = await TTSUtil.readAloud(index, () => {
+        if (!active()) return;
+        this.speechHighlighter.highlight(this.props.htmlBook.rendition, node.text,
+          this.props.currentBook.format === "PDF" && !ConfigService.getAllListConfig("convertPDFBooks").includes(this.props.currentBook.key), index);
+      });
+      if (!active() || res === "cancelled") return;
+      if (res === "loaderror") {
         toast.error(this.props.t("Audio loading failed, stopped playback"));
-        this.setState({ isAudioOn: false });
-        this.nodeList = [];
+        this.setState({ isPaused: true });
         return;
       }
-      if (this.state.isPaused || !this.state.isAudioOn) return;
       let visibleTextList = await this.props.htmlBook.rendition.visibleText();
+      if (!active()) return;
       let lastVisibleTextList = visibleTextList;
       if (
         this.props.currentBook.format === "PDF" &&
@@ -733,15 +754,21 @@ class TextToSpeech extends React.Component<
       }
       let isReachPageEnd = checkReachPageEnd(
         index,
-        this.nodeList,
+        nodes,
         lastVisibleTextList,
         this.props.currentBook
       );
-      if (index === this.nodeList.length - 1) {
+      if (this.props.currentBook.format !== "PDF") {
+        const lastVisible = findVisibleSpeechIndex(this.props.htmlBook.rendition, nodes.map(node => node.text), true);
+        if (lastVisible >= 0) isReachPageEnd = index >= lastVisible;
+      }
+      if (index === nodes.length - 1) {
         isReachPageEnd = true;
       }
 
       if (isReachPageEnd) {
+        const beforePage = this.props.htmlBook.rendition.getPosition();
+        const beforeChapter = JSON.stringify([beforePage.chapterDocIndex, beforePage.chapterHref]);
         if (
           this.props.currentBook.format === "PDF" &&
           !ConfigService.getAllListConfig("convertPDFBooks").includes(
@@ -754,19 +781,24 @@ class TextToSpeech extends React.Component<
               (this.props.readerMode === "double" ? 2 : 1)
           );
         } else {
-          if (index === this.nodeList.length - 1) {
+          if (index === nodes.length - 1) {
             await this.props.htmlBook.rendition.nextChapter();
           } else {
             await this.props.htmlBook.rendition.next();
           }
         }
+        if (!active()) return;
+        if (index === nodes.length - 1) {
+          const afterPage = this.props.htmlBook.rendition.getPosition();
+          const afterChapter = JSON.stringify([afterPage.chapterDocIndex, afterPage.chapterHref]);
+          // nextChapter clamps at EOF and may rewind the final chapter. Detect
+          // that before reloading its text, otherwise the book repeats forever.
+          if (beforeChapter === afterChapter) { await this.handleStop(); return; }
+        }
       }
-      if (res === "end") {
-        break;
-      }
+      if (!active()) return;
     }
-    if (this.state.isAudioOn && this.props.isReading) {
-      await TTSUtil.clearAudioPaths();
+    if (active()) {
       TTSUtil.setAudioPaths();
       let position = this.props.htmlBook.rendition.getPosition();
       ConfigService.setObjectConfig(
@@ -774,8 +806,17 @@ class TextToSpeech extends React.Component<
         position,
         "recordLocation"
       );
-      this.nodeList = [];
-      await this.handleAudio();
+      const nextNodes = await this.handleGetText();
+      if (!active()) return;
+      // A stationary reader at EOF returns the same content. Finish cleanly.
+      if (!nextNodes.length || (JSON.stringify(position) === chapterPosition && nextNodes.length === nodes.length && nextNodes.every((node, i) => node.text === nodes[i].text))) {
+        await this.handleStop();
+        return;
+      }
+      this.nodeList = nextNodes;
+      this.speechHighlighter.reset();
+      nodeIndex = 0;
+    }
     }
   }
   async handleSystemRead(index) {
@@ -787,7 +828,7 @@ class TextToSpeech extends React.Component<
     }
     this.setState({ currentIndex: index });
     let node = this.nodeList[index];
-    let style = this.highlightUtil.buildTtsHighlightStyle(
+    let style = ttsHighlightStyle(
       this.props.currentBook.format === "PDF" &&
         !ConfigService.getAllListConfig("convertPDFBooks").includes(
           this.props.currentBook.key
@@ -877,20 +918,8 @@ class TextToSpeech extends React.Component<
     }
   }
   handleSpeech = async (index: number) => {
-    return new Promise<string>(async (resolve) => {
-      let res = await TTSUtil.readAloud(index);
-      if (res === "loaderror") {
-        resolve("error");
-      } else {
-        let player = TTSUtil.getPlayer();
-        player.on("end", async () => {
-          if (!(this.state.isAudioOn && this.props.isReading)) {
-            resolve("end");
-          }
-          resolve("start");
-        });
-      }
-    });
+    const result = await TTSUtil.readAloud(index);
+    return result === "loaderror" ? "error" : result === "cancelled" ? "end" : "start";
   };
   handleSystemSpeech = async (
     index: number,
@@ -1199,7 +1228,9 @@ class TextToSpeech extends React.Component<
             onChange={(event) => {
               ConfigService.setReaderConfig("voiceSpeed", event.target.value);
               if (this.state.isAudioOn) {
-                toast(this.props.t("Take effect in a while"));
+                const voiceName = ConfigService.getReaderConfig("voiceName");
+                const engine = ConfigService.getReaderConfig("voiceEngine");
+                void this.handleVoiceSwitch(voiceName, engine, engine);
               }
               this.forceUpdate();
             }}

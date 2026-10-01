@@ -1540,7 +1540,7 @@ export const splitSentences = (text: string, maxLength?: number) => {
       const result: string[] = [];
       let current = "";
       for (const part of parts) {
-        const candidate = current ? current + part : part;
+        const candidate = current ? current + " " + part : part;
         if (candidate.length <= resolvedMaxLength) {
           current = candidate;
         } else {

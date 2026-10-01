@@ -10,6 +10,7 @@ import DOMPurify from "dompurify";
 import EmptyCover from "../../../components/emptyCover";
 import { ConfigService, HighlightUtil } from "../../../assets/lib/kookit-extra-browser.min";
 import CoverUtil from "../../../utils/file/coverUtil";
+import { searchHighlightStyle } from "../../../utils/reader/ttsHighlight";
 import {
   NAV_TAB_TOGGLE_EVENT,
   openReadingPanel,
@@ -211,7 +212,7 @@ class NavigationPanel extends React.Component<
         page: bookLocation.page,
       })
     );
-    let style = this.highlightUtil.buildSearchHighlightStyle(
+    let style = searchHighlightStyle(
       this.props.currentBook.format === "PDF" &&
         !ConfigService.getAllListConfig("convertPDFBooks").includes(
           this.props.currentBook.key

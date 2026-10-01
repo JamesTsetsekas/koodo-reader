@@ -16,6 +16,8 @@ import { themeList } from "../../../constants/themeList";
 import { HexColorPicker } from "react-colorful";
 import { reloadManager, parseColorInput } from "../../../utils/common";
 import FontUtil from "../../../utils/file/fontUtil";
+import { ttsBackgroundPresets } from "../../../utils/reader/ttsHighlight";
+import HighlightPalette from "../../../components/highlightPalette/component";
 import {
   applyCustomSystemCSS,
   applyCustomSystemFont,
@@ -55,8 +57,10 @@ class AppearanceSetting extends React.Component<
       customSystemCSS: ConfigService.getReaderConfig("customSystemCSS") || "",
       ttsHighlightStyleType: ttsHighlight.styleType,
       ttsHighlightColor: ttsHighlight.color,
+      ttsHighlightTextColor: ConfigService.getReaderConfig("ttsHighlightTextColor") || "",
       searchHighlightStyleType: searchHighlight.styleType,
       searchHighlightColor: searchHighlight.color,
+      searchHighlightTextColor: ConfigService.getReaderConfig("searchHighlightTextColor") || "",
     };
   }
 
@@ -155,11 +159,21 @@ class AppearanceSetting extends React.Component<
 
   handleTtsPresetColor = (index: number) => {
     const styleType = this.state.ttsHighlightStyleType;
-    const color = KookitConfig.HighlightPresetColors[styleType][index];
+    const color = (styleType === "background" ? ttsBackgroundPresets : KookitConfig.HighlightPresetColors[styleType])[index];
+    this.handleTtsCustomColor(color);
+  };
+
+  handleTtsCustomColor = (color: string) => {
+    const styleType = this.state.ttsHighlightStyleType;
     this.setState({
       ttsHighlightColor: color,
     });
     this.highlightUtil.saveTtsHighlightValue({ styleType, color });
+  };
+
+  handleTtsTextColor = (color: string) => {
+    ConfigService.setReaderConfig("ttsHighlightTextColor", color);
+    this.setState({ ttsHighlightTextColor: color });
   };
 
   handleSearchStyleType = (styleType: string) => {
@@ -173,17 +187,28 @@ class AppearanceSetting extends React.Component<
 
   handleSearchPresetColor = (index: number) => {
     const styleType = this.state.searchHighlightStyleType;
-    const color = KookitConfig.HighlightPresetColors[styleType][index];
+    const color = (styleType === "background" ? ttsBackgroundPresets : KookitConfig.HighlightPresetColors[styleType])[index];
+    this.handleSearchCustomColor(color);
+  };
+
+  handleSearchCustomColor = (color: string) => {
+    const styleType = this.state.searchHighlightStyleType;
     this.setState({
       searchHighlightColor: color,
     });
     this.highlightUtil.saveSearchHighlightValue({ styleType, color });
   };
 
+  handleSearchTextColor = (color: string) => {
+    ConfigService.setReaderConfig("searchHighlightTextColor", color);
+    this.setState({ searchHighlightTextColor: color });
+  };
+
   renderTtsHighlightSetting = () => {
     const styleType = this.state.ttsHighlightStyleType;
     const currentColor = this.state.ttsHighlightColor;
-    const presetColors = KookitConfig.HighlightPresetColors[styleType];
+    const presetColors = styleType === "background" ? ttsBackgroundPresets : KookitConfig.HighlightPresetColors[styleType];
+    const textColor = this.state.ttsHighlightTextColor;
 
     return (
       <>
@@ -213,10 +238,10 @@ class AppearanceSetting extends React.Component<
               >
                 <span
                   className="tts-highlight-style-preview"
-                  style={this.highlightUtil.buildTtsHighlightPreviewStyle(
+                  style={{ ...this.highlightUtil.buildTtsHighlightPreviewStyle(
                     item.value,
                     previewColor
-                  )}
+                  ), ...(textColor ? { color: textColor, WebkitTextFillColor: textColor } : {}) }}
                 >
                   Aa
                 </span>
@@ -227,20 +252,10 @@ class AppearanceSetting extends React.Component<
             );
           })}
         </ul>
-        <ul className="tts-highlight-color-container">
-          {presetColors.map((color, index) => (
-            <li
-              key={color}
-              className={
-                presetColors.indexOf(currentColor) === index
-                  ? "tts-highlight-color-item active-tts-highlight-color"
-                  : "tts-highlight-color-item"
-              }
-              style={{ backgroundColor: color }}
-              onClick={() => this.handleTtsPresetColor(index)}
-            />
-          ))}
-        </ul>
+        <HighlightPalette label={styleType === "background" ? "TTS highlight background" : "TTS highlight line color"}
+          value={currentColor} presets={presetColors} onChange={this.handleTtsCustomColor} />
+        <HighlightPalette label="TTS highlighted text color" value={textColor}
+          presets={["#000000", "#161616", "#FFFFFF"]} onChange={this.handleTtsTextColor} allowOriginal />
       </>
     );
   };
@@ -248,7 +263,8 @@ class AppearanceSetting extends React.Component<
   renderSearchHighlightSetting = () => {
     const styleType = this.state.searchHighlightStyleType;
     const currentColor = this.state.searchHighlightColor;
-    const presetColors = KookitConfig.HighlightPresetColors[styleType];
+    const presetColors = styleType === "background" ? ttsBackgroundPresets : KookitConfig.HighlightPresetColors[styleType];
+    const textColor = this.state.searchHighlightTextColor;
 
     return (
       <>
@@ -276,10 +292,10 @@ class AppearanceSetting extends React.Component<
               >
                 <span
                   className="tts-highlight-style-preview"
-                  style={this.highlightUtil.buildSearchHighlightPreviewStyle(
+                  style={{ ...this.highlightUtil.buildSearchHighlightPreviewStyle(
                     item.value,
                     previewColor
-                  )}
+                  ), ...(textColor ? { color: textColor, WebkitTextFillColor: textColor } : {}) }}
                 >
                   Aa
                 </span>
@@ -290,20 +306,10 @@ class AppearanceSetting extends React.Component<
             );
           })}
         </ul>
-        <ul className="tts-highlight-color-container">
-          {presetColors.map((color, index) => (
-            <li
-              key={color}
-              className={
-                presetColors.indexOf(currentColor) === index
-                  ? "tts-highlight-color-item active-tts-highlight-color"
-                  : "tts-highlight-color-item"
-              }
-              style={{ backgroundColor: color }}
-              onClick={() => this.handleSearchPresetColor(index)}
-            />
-          ))}
-        </ul>
+        <HighlightPalette label={styleType === "background" ? "Search highlight background" : "Search highlight line color"}
+          value={currentColor} presets={presetColors} onChange={this.handleSearchCustomColor} />
+        <HighlightPalette label="Search highlighted text color" value={textColor}
+          presets={["#000000", "#161616", "#FFFFFF"]} onChange={this.handleSearchTextColor} allowOriginal />
       </>
     );
   };

@@ -23,6 +23,7 @@ const store = new Store();
 const fs = require("fs");
 const configDir = app.getPath("userData");
 const dirPath = path.join(configDir, "uploads");
+const localCoqui = require("./local-coqui.cjs").createCoquiGenerator(dirPath);
 const packageJson = require("./package.json");
 let mainWin;
 let tray = null;
@@ -468,7 +469,7 @@ const singleInstance = app.requestSingleInstanceLock();
 var filePath = null;
 var pendingDeepLink = null;
 if (process.platform != "darwin" && process.argv.length >= 2) {
-  filePath = process.argv[1];
+  filePath = process.argv.slice(1).find((arg) => !arg.startsWith("-") && fs.existsSync(arg) && fs.statSync(arg).isFile() && !/\.(?:js|cjs|asar)$/.test(arg)) || null;
   // Check argv for a deep link URL (cold start)
   for (const arg of process.argv) {
     if (arg.startsWith("koodo-reader://")) {
@@ -1008,6 +1009,9 @@ const createMainWin = () => {
   });
   ipcMain.handle("generate-tts", async (event, voiceConfig) => {
     let { text, speed, plugin, config } = voiceConfig;
+    if (plugin.key === "coquitts-voice-plugin") {
+      return localCoqui({ text, speed, config });
+    }
     let voiceFunc = plugin.script;
     // eslint-disable-next-line no-eval
     eval(voiceFunc);

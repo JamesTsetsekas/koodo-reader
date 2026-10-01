@@ -1,0 +1,12 @@
+.highlight-palette { margin: 12px 25px 18px; }
+.highlight-palette-label { margin-bottom: 8px; }
+.highlight-palette-swatches { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.highlight-palette-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.highlight-palette-swatch[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
+.highlight-palette-swatch:focus-visible, .highlight-palette-custom:focus-visible { outline: 2px solid var(--theme-color, #ff7a00); outline-offset: 3px; }
+.highlight-palette-custom, .highlight-palette-original, .highlight-palette-picker button { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.highlight-palette-original[aria-pressed="true"] { border-width: 2px; }
+.highlight-palette-value { font-size: 12px; opacity: .8; }
+.highlight-palette-picker { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+.highlight-palette-hex { display: flex; flex-direction: column; gap: 8px; }
+.highlight-palette-hex input { width: 100px; padding: 7px; background: transparent; border: 1px solid currentColor; border-radius: 5px; color: inherit; }

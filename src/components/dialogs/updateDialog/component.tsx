@@ -36,6 +36,9 @@ class UpdateInfo extends React.Component<UpdateInfoProps, UpdateInfoState> {
     };
   }
   async componentDidMount() {
+    // Installing an upstream binary would discard this local source build's
+    // speech and highlight fixes. Upgrade this fork deliberately instead.
+    if (packageInfo.version.includes("-local.")) return;
     if (!this.props.currentBook.key) {
       if (!isElectron) {
         return;

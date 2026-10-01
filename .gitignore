@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+/runtime-app/
+/test-profile/
+/test-artifacts/
 /.pnp
 .pnp.js
 

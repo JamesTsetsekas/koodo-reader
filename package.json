@@ -1,7 +1,7 @@
 {
   "name": "koodo-reader",
   "main": "main.js",
-  "version": "2.3.9",
+  "version": "2.3.9-local.1",
   "description": "Koodo Reader is a cross-platform ebook reader",
   "author": {
     "name": "App by Troye",
@@ -67,12 +67,14 @@
     "@types/file-saver": "^2.0.7",
     "@types/hammerjs": "^2.0.46",
     "@types/i18next": "^13.0.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^13.13.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/react-i18next": "^8.1.0",
     "@types/react-router-dom": "^5.1.6",
     "@types/react-tooltip": "^4.2.4",
+    "@types/sortablejs": "^1.15.9",
     "@types/underscore": "^1.13.0",
     "@types/ws": "^8.5.5",
     "classnames": "^2.2.6",
@@ -105,6 +107,7 @@
     "analyze": "source-map-explorer 'build/static/js/*.js'",
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "build:local": "node scripts/build-local.cjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "ele": "electron .",
@@ -124,7 +127,8 @@
       "node_modules/**/*",
       "package.json",
       "src/assets/lib/kookit-extra.min.mjs",
-      "main.js"
+      "main.js",
+      "local-coqui.cjs"
     ],
     "protocols": {
       "name": "KoodoReader",
