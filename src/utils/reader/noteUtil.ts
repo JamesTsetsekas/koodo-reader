@@ -5,6 +5,7 @@ import {
   NoteSyncManager,
 } from "../../assets/lib/kookit-extra-browser.min";
 import { getIframeDoc } from "./docUtil";
+import { applyMouseHighlightStyle, mouseHighlightValue } from "./ttsHighlight";
 
 export interface DigestParams {
   currentBook: any;
@@ -23,12 +24,16 @@ export async function createHighlight(params: DigestParams): Promise<void> {
     htmlBook,
     chapterDocIndex,
     chapter,
-    color,
     onNoteClick,
     onSuccess,
   } = params;
 
   if (!htmlBook) return;
+
+  // Keep quick mouse highlights readable in a dark reader. The color picker
+  // remains available when editing a saved note, but one-click highlights use
+  // the same white/black treatment as local TTS and search.
+  const color = mouseHighlightValue;
 
   let bookKey = currentBook.key;
   let bookLocation = ConfigService.getObjectConfig(
@@ -82,6 +87,7 @@ export async function createHighlight(params: DigestParams): Promise<void> {
 
   await DatabaseService.saveRecord(highlight, "notes");
   await htmlBook.rendition.createOneNote(highlight, onNoteClick ?? (() => {}));
+  applyMouseHighlightStyle(htmlBook.rendition);
   let noteSyncManager = new NoteSyncManager(DatabaseService, ConfigService);
   noteSyncManager.syncNote(highlight, bookKey);
   onSuccess?.();

@@ -3,6 +3,24 @@ import { ConfigService, HighlightUtil } from "../../assets/lib/kookit-extra-brow
 const presets = ["#F3C9C9", "#FEF3CD", "#CEFACD", "#CDE9FA", "#FF9900", "#D8D8D8", "#FFFFFF"];
 export const ttsBackgroundPresets = presets;
 export const highlightHelper = new HighlightUtil(ConfigService);
+export const mouseHighlightValue = "background-#FFFFFF";
+
+/**
+ * Koodo applies reader typography rules to ordinary spans. Native highlights
+ * are specifically excluded; make the custom TTS wrapper use that same path
+ * so a large reader line-height cannot turn a sentence into a tall block.
+ */
+const inlineHighlightLayout = "display: inline !important; margin: 0 !important; padding: 0 !important; vertical-align: baseline !important; -webkit-box-decoration-break: clone; box-decoration-break: clone;";
+
+/** Give ordinary mouse highlights the same readable dark-reader treatment. */
+export function applyMouseHighlightStyle(rendition: any) {
+  const doc: Document | undefined = rendition?.getDocument?.();
+  if (!doc || doc.getElementById("koodo-local-mouse-highlight-style")) return;
+  const style = doc.createElement("style");
+  style.id = "koodo-local-mouse-highlight-style";
+  style.textContent = `.kookit-note { background: #FFFFFF !important; color: #000000 !important; -webkit-text-fill-color: #000000 !important; text-shadow: none !important; ${inlineHighlightLayout} }`;
+  doc.head?.appendChild(style);
+}
 function customHighlightStyle(kind: "tts" | "search", isPdf: boolean) {
   const value = kind === "tts" ? highlightHelper.getTtsHighlightValue() : highlightHelper.getSearchHighlightValue();
   let style = kind === "tts" ? highlightHelper.buildTtsHighlightStyle(isPdf) : highlightHelper.buildSearchHighlightStyle(isPdf);
@@ -11,7 +29,7 @@ function customHighlightStyle(kind: "tts" | "search", isPdf: boolean) {
     // Reader theme colors use !important; the speaking text must override them.
     style += `color: ${foreground} !important; -webkit-text-fill-color: ${foreground} !important; text-shadow: none !important;`;
   }
-  if (value.styleType === "background" && !isPdf) style += `background-color: ${value.color} !important;`;
+  if (value.styleType === "background" && !isPdf) style += `background-color: ${value.color} !important; ${inlineHighlightLayout}`;
   return style;
 }
 export const ttsHighlightStyle = (isPdf = false) => customHighlightStyle("tts", isPdf);
@@ -135,6 +153,7 @@ export default class SpeechHighlighter {
       range.setStart(part.node, left); range.setEnd(part.node, right);
       const span = doc.createElement("span");
       span.setAttribute("data-koodo-tts", "true");
+      span.className = "kookit-highlight-text";
       span.setAttribute("style", ttsHighlightStyle());
       range.surroundContents(span);
     }

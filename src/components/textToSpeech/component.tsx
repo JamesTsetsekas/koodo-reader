@@ -22,7 +22,7 @@ import "./textToSpeech.css";
 import { fetchUserInfo } from "../../utils/request/user";
 import { getSplitSentence } from "../../utils/request/reader";
 import { Howl } from "howler";
-import SpeechHighlighter, { ttsHighlightStyle, findVisibleSpeechIndex } from "../../utils/reader/ttsHighlight";
+import SpeechHighlighter, { applyMouseHighlightStyle, ttsHighlightStyle, findVisibleSpeechIndex } from "../../utils/reader/ttsHighlight";
 declare var window: any;
 class TextToSpeech extends React.Component<
   TextToSpeechProps,
@@ -89,6 +89,7 @@ class TextToSpeech extends React.Component<
     this.previewPlayer = null;
   }
   async componentDidMount() {
+    applyMouseHighlightStyle(this.props.htmlBook?.rendition);
     if ("speechSynthesis" in window) {
       this.setState({ isSupported: true });
     }
@@ -202,6 +203,9 @@ class TextToSpeech extends React.Component<
     this.stopPreviewAudio();
   }
   componentDidUpdate(prevProps: Readonly<TextToSpeechProps>) {
+    if (this.props.htmlBook?.rendition !== prevProps.htmlBook?.rendition) {
+      applyMouseHighlightStyle(this.props.htmlBook?.rendition);
+    }
     if (this.props.isSpeechAutoStart && !prevProps.isSpeechAutoStart) {
       this.handleSpeechAutoStartRequest();
     }

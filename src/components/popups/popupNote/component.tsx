@@ -15,6 +15,7 @@ import {
 import DatabaseService from "../../../utils/storage/databaseService";
 import ColorOption from "../../colorOption";
 import copy from "copy-text-to-clipboard";
+import { applyMouseHighlightStyle, mouseHighlightValue } from "../../../utils/reader/ttsHighlight";
 class PopupNote extends React.Component<PopupNoteProps, PopupNoteState> {
   highlightUtil: any;
   constructor(props: PopupNoteProps) {
@@ -142,9 +143,7 @@ class PopupNote extends React.Component<PopupNoteProps, PopupNoteState> {
           ).percentage
         : "0";
 
-      let color =
-        this.highlightUtil.formatHighlightValue(this.props.highlight) ||
-        "background-#FEF3CD";
+      let color = mouseHighlightValue;
       let tag = this.state.tag;
 
       let note = new Note(
@@ -167,6 +166,7 @@ class PopupNote extends React.Component<PopupNoteProps, PopupNoteState> {
           note,
           this.handleNoteClick
         );
+        applyMouseHighlightStyle(this.props.htmlBook.rendition);
         // Auto-sync note to enabled destinations
         let noteSyncManager = new NoteSyncManager(
           DatabaseService,
